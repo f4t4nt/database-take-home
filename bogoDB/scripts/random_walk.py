@@ -7,7 +7,7 @@ import multiprocessing as mp
 from tqdm import tqdm
 from functools import partial
 from typing import List, Dict, Tuple, Optional, Union, Any
-from constants import (
+from scripts.constants import (
     MAX_DEPTH,
     NUM_WALKS_PER_QUERY,
     RANDOM_SEED,

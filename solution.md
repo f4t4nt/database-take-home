@@ -29,6 +29,13 @@
 
 10:20AM: started setting up local copy of repo
 10:33AM: everything set up on Windows, ran base solution
+10:41AM: switched to WSL successfully
+10:50AM: finished basic analysis of question, beginning naive simulated annealing approach
+11:33AM: completed naive simulated annealing approach, testing locally
+         - prunes edges with given solution
+         - swaps included/excluded edges randomly with decaying temperature
+         - really slow, plenty of room to improve but things seem to be working
+
 
 ---
 

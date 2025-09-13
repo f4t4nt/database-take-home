@@ -4,6 +4,7 @@ import os
 import sys
 import random
 import numpy as np
+import statistics
 from collections import defaultdict, Counter
 from typing import Dict, List, Tuple, Any
 
@@ -93,6 +94,11 @@ def optimize_graph(
     """
     print("Starting graph optimization...")
 
+    # Store initial graph as our reference for valid edges
+    initial_edges = {}
+    for node, edges in initial_graph.items():
+        initial_edges[node] = dict(edges)
+
     # Create a copy of the initial graph to modify
     optimized_graph = {}
     for node, edges in initial_graph.items():
@@ -127,6 +133,10 @@ def optimize_graph(
     # sophisticated strategy based on query analysis!
     # ---------------------------------------------------------------
 
+    ########################################################
+    # Base solution (remove edges to satisfy constraints): #
+    ########################################################
+
     # Count total edges in the initial graph
     total_edges = sum(len(edges) for edges in optimized_graph.values())
 
@@ -156,7 +166,169 @@ def optimize_graph(
                 min_edge = min(optimized_graph[node].items(), key=lambda x: x[1])
                 del optimized_graph[node][min_edge[0]]
                 removed += 1
+    
+    #######################################
+    # Basic simulated annealing solution: #
+    #######################################
+    
+    TEMPERATURE = 1.0
+    COOLING_RATE = 0.7
+    MIN_TEMPERATURE = 0.01
+    MAX_ITERATIONS = 10
+    
+    with open(os.path.join(project_dir, "data", "queries.json"), "r") as f:
+        queries = json.load(f)
+    
+    # Count query frequencies to focus on important nodes
+    query_counts = Counter(queries)
+    important_nodes = sorted(query_counts.items(), key=lambda x: x[1], reverse=True)
+    
+    # Import here so it's clear what we're using
+    from scripts.random_walk import BogoDB, run_queries
 
+    def get_metrics(graph, queries):
+        """Run queries on a graph and return success rate and median path length"""
+        # Create BogoDB instance and run queries
+        db = BogoDB(graph)
+        results = run_queries(db, queries)
+        details = results.get("detailed_results", [])
+        
+        # Get success rate
+        success = sum(1 for r in details if r.get("success", False) or r.get("is_success", False))
+        rate = success / len(details) if details else 0
+        
+        # Get median path length
+        lengths = [
+            r.get("median_path_length", float("inf")) 
+            for r in details 
+            if (r.get("success", False) or r.get("is_success", False)) 
+            and r.get("median_path_length", float("inf")) != float("inf")
+        ]
+        median = statistics.median(lengths) if lengths else float("inf")
+        
+        return rate, median
+    
+    # Get initial graph's baseline metrics
+    initial_rate, initial_median = get_metrics(initial_graph, queries)
+    print(f"Initial success rate: {initial_rate:.4f}, median path length: {initial_median:.2f}")
+    
+    def calculate_score(graph, results):
+        # Get metrics for new graph
+        optimized_rate, optimized_median = get_metrics(graph, queries)
+        
+        # Calculate combined score using exact same formula as evaluate_graph.py
+        if optimized_rate == 0:
+            # If nothing succeeds, score is 0
+            combined_score = 0
+        elif initial_median == float("inf") or optimized_median == float("inf"):
+            # If we can't compute improvement, use only success rate
+            combined_score = optimized_rate
+        else:
+            # Calculate a multiplier based on path length improvement
+            path_multiplier = np.log1p(initial_median / optimized_median)
+            combined_score = optimized_rate * (1 + path_multiplier)
+            
+        return combined_score
+
+    def swap_single_edge(graph):
+        """Make a single edge swap: remove one edge and add a different valid edge"""
+        new_graph = {node: dict(edges) for node, edges in graph.items()}
+        
+        # 1. SELECT AND REMOVE AN EDGE FROM CURRENT GRAPH
+        # Find all edges that can be safely removed (leaving at least one edge per node)
+        removable_edges = []
+        for node, edges in new_graph.items():
+            if len(edges) > 1:  # Only consider nodes with more than one edge
+                for target, weight in edges.items():
+                    removable_edges.append((node, target))
+        
+        if not removable_edges:
+            return new_graph
+            
+        # Remove a random edge that won't disconnect any nodes
+        source, target = random.choice(removable_edges)
+        del new_graph[source][target]
+        
+        # 2. ADD AN EDGE FROM INITIAL GRAPH THAT'S NOT IN CURRENT GRAPH
+        # Find all possible edges from initial graph that we could add
+        possible_edges = []
+        for node, edges in initial_edges.items():
+            # Skip if node already has max edges
+            if len(new_graph[node]) >= max_edges_per_node:
+                continue
+            
+            for target, weight in edges.items():
+                # Check if this edge exists in current graph
+                if target not in new_graph[node]:
+                    possible_edges.append((node, target, weight))
+        
+        if possible_edges:
+            # Add a random valid edge from initial graph
+            new_source, new_target, weight = random.choice(possible_edges)
+            new_graph[new_source][new_target] = weight
+            
+        return new_graph
+        
+    def modify_graph(graph):
+        """Make multiple random edge swaps for more chaotic transitions"""
+        new_graph = {node: dict(edges) for node, edges in graph.items()}
+        
+        # Make multiple swaps
+        num_swaps = random.randint(10, 50)  # Random number of swaps
+        for _ in range(num_swaps):
+            new_graph = swap_single_edge(new_graph)
+            
+            # Verify we haven't broken any constraints
+            if not verify_constraints(new_graph, max_edges_per_node, max_total_edges):
+                # If we broke constraints, revert to previous state
+                return graph
+                
+        return new_graph
+    
+    # Run simulated annealing
+    current_graph = optimized_graph.copy()
+    best_graph = current_graph.copy()
+    current_score = calculate_score(current_graph, results)
+    best_score = current_score
+    temperature = TEMPERATURE
+    
+    print(f"Starting simulated annealing with initial score: {current_score:.4f}")
+    
+    for iteration in range(MAX_ITERATIONS):
+        # Make a random modification
+        new_graph = modify_graph(current_graph)
+        
+        # Skip if constraints not met
+        if not verify_constraints(new_graph, max_edges_per_node, max_total_edges):
+            continue
+        
+        # Calculate new score
+        new_score = calculate_score(new_graph, results)
+        
+        # Calculate acceptance probability
+        delta = new_score - current_score
+        acceptance_prob = 1.0 if delta > 0 else np.exp(delta / temperature)
+        
+        # Accept or reject new solution
+        if random.random() < acceptance_prob:
+            current_graph = new_graph
+            current_score = new_score
+            
+            # Update best solution if this is better
+            if current_score > best_score:
+                best_score = current_score
+                best_graph = current_graph.copy()
+                print(f"New best score at iteration {iteration}: {best_score:.4f}")
+        
+        # Cool down
+        temperature *= COOLING_RATE
+        if temperature < MIN_TEMPERATURE:
+            print("Reached minimum temperature, stopping...")
+            break
+    
+    print(f"Final best score: {best_score:.4f}")
+    optimized_graph = best_graph
+    
     # =============================================================
     # End of your implementation
     # =============================================================
