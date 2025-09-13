@@ -80,7 +80,7 @@ def validate_graph(
 
 
 def compare_results(
-    initial_results: Dict[str, Any], optimized_results: Dict[str, Any]
+    initial_results: Dict[str, Any], optimized_results: Dict[str, Any], plot_path: str
 ) -> Dict[str, Any]:
     """
     Compare initial and optimized query results.
@@ -88,6 +88,7 @@ def compare_results(
     Args:
         initial_results: Results from initial graph
         optimized_results: Results from optimized graph
+        plot_path: Path where to save the comparison plot
 
     Returns:
         Dictionary with comparison metrics
@@ -197,7 +198,8 @@ def compare_results(
 
     # Create simple visualization
     visualize_results(
-        initial_details, optimized_details, initial_lengths, optimized_lengths
+        initial_details, optimized_details, initial_lengths, optimized_lengths,
+        plot_path
     )
 
     # Return metrics
@@ -212,10 +214,18 @@ def compare_results(
 
 
 def visualize_results(
-    initial_details, optimized_details, initial_lengths, optimized_lengths
+    initial_details, optimized_details, initial_lengths, optimized_lengths,
+    output_path
 ):
     """
     Create a simple visualization of evaluation results.
+    
+    Args:
+        initial_details: Detailed results from initial graph
+        optimized_details: Detailed results from optimized graph
+        initial_lengths: Path lengths from initial graph
+        optimized_lengths: Path lengths from optimized graph
+        output_path: Where to save the comparison plot
     """
     # Calculate success rates
     initial_success = sum(
@@ -290,23 +300,36 @@ def visualize_results(
         ax2.set_title("Path Length Comparison")
 
     plt.tight_layout(pad=3.0)
-    plt.savefig(os.path.join(project_root, "data", "evaluation_comparison.png"))
-    print(f"\nEvaluation visualization saved to data/evaluation_comparison.png")
+    plt.savefig(output_path)
+    print(f"\nEvaluation visualization saved to {output_path}")
 
 
 def evaluate_graphs():
     """
     Main function to run the evaluation process.
     """
+    # Create timestamped directory for this evaluation
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    data_dir = os.path.join(project_root, "data")  # Source files are in data/
+    results_dir = os.path.join(data_dir, "results", timestamp)  # Put results in data/results/TIMESTAMP
+    os.makedirs(results_dir, exist_ok=True)
+    print(f"\nStoring evaluation results in: {results_dir}")
+    
     # Set paths
-    data_dir = os.path.join(project_root, "data")
     candidate_dir = os.path.join(project_root, "candidate_submission")
-
+    
+    # Source files (don't change)
     initial_graph_file = os.path.join(data_dir, "initial_graph.json")
     queries_file = os.path.join(data_dir, "queries.json")
     initial_results_file = os.path.join(data_dir, "initial_results.json")
     optimized_graph_file = os.path.join(candidate_dir, "optimized_graph.json")
-    optimized_results_file = os.path.join(data_dir, "optimized_results.json")
+    
+    # Output files (go in timestamped directory)
+    optimized_results_file = os.path.join(results_dir, "optimized_results.json")
+    summary_file = os.path.join(results_dir, "summary.txt")
+    comparison_plot = os.path.join(results_dir, "comparison.png")
+    eval_graph_file = os.path.join(results_dir, "optimized_graph.json")
 
     # Check file existence
     if not os.path.exists(initial_graph_file):
@@ -356,8 +379,33 @@ def evaluate_graphs():
     with open(optimized_results_file, "w") as f:
         json.dump(optimized_results, f, indent=2)
 
-    # Compare results
-    compare_results(initial_results, optimized_results)
+    # Compare results and get metrics
+    metrics = compare_results(initial_results, optimized_results, comparison_plot)
+    
+    # Save optimized graph
+    with open(eval_graph_file, 'w') as f:
+        json.dump(optimized_graph, f, indent=2)
+    
+    # Write evaluation summary
+    with open(summary_file, 'w') as f:
+        f.write("BogoDB Evaluation Summary\n")
+        f.write("=======================\n\n")
+        f.write(f"Evaluation timestamp: {timestamp}\n\n")
+        
+        f.write("Success Rates:\n")
+        f.write(f"  Initial:   {metrics['initial_success_rate']*100:.1f}%\n")
+        f.write(f"  Optimized: {metrics['optimized_success_rate']*100:.1f}%\n\n")
+        
+        f.write("Median Path Lengths:\n")
+        f.write(f"  Initial:   {metrics['initial_median']:.2f}\n")
+        f.write(f"  Optimized: {metrics['optimized_median']:.2f}\n\n")
+        
+        f.write("Improvements:\n")
+        f.write(f"  Success Rate: {(metrics['optimized_success_rate']-metrics['initial_success_rate'])*100:.1f}%\n")
+        f.write(f"  Path Length: {metrics['path_improvement_pct']:.1f}%\n")
+        f.write(f"  Combined Score: {metrics['combined_score']:.2f}\n")
+    
+    print(f"\nResults saved to {results_dir}")
 
 
 if __name__ == "__main__":
