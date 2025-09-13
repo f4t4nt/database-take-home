@@ -25,6 +25,11 @@
 
 [Briefly describe your iteration process - what approaches you tried, what you learned, and how your solution evolved]
 
+### Timeline
+
+10:20AM: started setting up local copy of repo
+10:33AM: everything set up on Windows, ran base solution
+
 ---
 
 * Be concise but thorough - aim for 500-1000 words total
