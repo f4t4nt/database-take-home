@@ -35,7 +35,9 @@
          - prunes edges with given solution
          - swaps included/excluded edges randomly with decaying temperature
          - really slow, plenty of room to improve but things seem to be working
-
+12:05PM: added timestamped results tracking to easily check for future improvement
+12:25PM: exponentially weighted nodes (edges connected to smaller nodes are more likely to be deleted / added)
+12:25PM: realized edge weights AND edges are probably modifiable (we don't need to be choosing subset of edges from initial graph)
 
 ---
 

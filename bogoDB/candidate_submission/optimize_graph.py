@@ -171,10 +171,28 @@ def optimize_graph(
     # Basic simulated annealing solution: #
     #######################################
     
+    # Simulated annealing parameters
     TEMPERATURE = 1.0
     COOLING_RATE = 0.7
     MIN_TEMPERATURE = 0.01
     MAX_ITERATIONS = 10
+    
+    # Node preference parameters
+    NODE_PREFERENCE_FACTOR = 1.5  # Node 0 is 1.5x more likely than node 499
+    
+    # Pre-compute node weights
+    node_weights = {}
+    for n in range(num_nodes):
+        # Exponentially scale weight from 1.0 (node 499) to (1 + factor) (node 0)
+        weight = (1 + NODE_PREFERENCE_FACTOR) ** ((num_nodes - 1 - n) / (num_nodes - 1))
+        node_weights[str(n)] = weight
+    
+    # Pre-compute all possible edge weights from initial graph
+    edge_weight_dict = {}  # (source, target) -> weight
+    for source, edges in initial_edges.items():
+        for target in edges:
+            weight = min(node_weights[source], node_weights[target])
+            edge_weight_dict[(source, target)] = weight
     
     with open(os.path.join(project_dir, "data", "queries.json"), "r") as f:
         queries = json.load(f)
@@ -237,21 +255,26 @@ def optimize_graph(
         # 1. SELECT AND REMOVE AN EDGE FROM CURRENT GRAPH
         # Find all edges that can be safely removed (leaving at least one edge per node)
         removable_edges = []
+        edge_weights_list = []  # Weights for selection probability
         for node, edges in new_graph.items():
             if len(edges) > 1:  # Only consider nodes with more than one edge
-                for target, weight in edges.items():
+                for target, _ in edges.items():
                     removable_edges.append((node, target))
+                    # Use pre-computed edge weight
+                    edge_weights_list.append(edge_weight_dict[(node, target)])
         
         if not removable_edges:
             return new_graph
             
-        # Remove a random edge that won't disconnect any nodes
-        source, target = random.choice(removable_edges)
+        # Remove a random edge using weighted selection
+        chosen_idx = random.choices(range(len(removable_edges)), weights=edge_weights_list, k=1)[0]
+        source, target = removable_edges[chosen_idx]
         del new_graph[source][target]
         
         # 2. ADD AN EDGE FROM INITIAL GRAPH THAT'S NOT IN CURRENT GRAPH
         # Find all possible edges from initial graph that we could add
         possible_edges = []
+        add_weights = []  # Weights for selection probability
         for node, edges in initial_edges.items():
             # Skip if node already has max edges
             if len(new_graph[node]) >= max_edges_per_node:
@@ -261,10 +284,13 @@ def optimize_graph(
                 # Check if this edge exists in current graph
                 if target not in new_graph[node]:
                     possible_edges.append((node, target, weight))
+                    # Use pre-computed edge weight
+                    add_weights.append(edge_weight_dict[(node, target)])
         
         if possible_edges:
-            # Add a random valid edge from initial graph
-            new_source, new_target, weight = random.choice(possible_edges)
+            # Add a random valid edge using weighted selection
+            chosen_idx = random.choices(range(len(possible_edges)), weights=add_weights, k=1)[0]
+            new_source, new_target, weight = possible_edges[chosen_idx]
             new_graph[new_source][new_target] = weight
             
         return new_graph
