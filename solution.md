@@ -12,43 +12,42 @@ The 200 queries mostly target low-numbered nodes (0-99). Only 37 unique nodes ar
 
 ### Optimization Strategy
 
-I used a single loop that positions nodes based on query frequency:
+After testing multiple approaches, I found that a simple sequential ordering works best:
 
-1. **Base loop**: All 500 nodes connected in a cycle
-2. **Top-100 shortcuts**: Each node also connects to the next top-100 node in the loop
-3. **Weighted edges**: Low weight (0.1) for next node, higher weight (1.0) for top-100 jumps
+1. **Sequential loop**: Nodes ordered 0-1-2-3-4... (not randomized)
+2. **Top-100 shortcuts**: Each node connects to the next top-100 node in the loop
+3. **Weighted edges**: Low weight (0.1) for next node, weight 1.0 for top-100 jumps
 4. **Generalizable**: Uses top-100 instead of specific query nodes to avoid overfitting
 
-This spreads queried nodes around the loop, reducing path lengths.
+Sequential ordering keeps frequently queried nodes (0-99) close together, minimizing path lengths.
 
 ### Implementation
 
 The approach:
 
 ```python
-# Single loop construction:
-# 1. Space 37 queried nodes evenly around the 500-node loop
-# 2. Place 63 low-valued non-queried nodes with offset to avoid clusters  
-# 3. Fill remaining 400 positions with random permutation
-# 4. Connect each node to the next, forming a Hamiltonian cycle
+# Sequential loop construction:
+# 1. Create simple sequential ordering: [0, 1, 2, ..., 499]
+# 2. Connect each node to the next node in sequence
+# 3. Add shortcuts from each node to the next top-100 node
 ```
 
 Key decisions:
 - Each node has 1-2 edges: next node (0.1 weight) and/or next top-100 (1.0 weight)
-- If next node is top-100, only one edge with weight 1.0
-- 900 total edges, max 2 per node
+- If next node is already top-100, only one edge with weight 1.0
+- 900 total edges used, max 2 per node
 
 ### Results
 
-**Performance improvement: 87.1%**
+**Performance improvement: 98.2%**
 - Initial median path length: 446.0
-- Optimized median path length: 57.8
+- Optimized median path length: 8.0
 - Initial success rate: 80.5%
 - Optimized success rate: 100% (all queries found paths)
 - Success rate improvement: 19.5 percentage points
 - Graph constraints: 900 edges (90% of limit), max 2 edges/node, valid weights
 
-Top-100 shortcuts dramatically reduce path lengths by allowing quick jumps to important nodes.
+Sequential ordering with top-100 shortcuts dramatically reduces path lengths while maintaining full connectivity.
 
 ### Trade-offs & Limitations
 
@@ -64,7 +63,7 @@ Top-100 shortcuts dramatically reduce path lengths by allowing quick jumps to im
 
 ### Iteration Journey
 
-My approach evolved significantly over the ~4.5 hour development period:
+My approach evolved significantly over the development period:
 
 1. **0-2 hours**: Built simulated annealing with edge swapping. Treated it as selecting edges from the initial graph. Slow and didn't improve much.
 
@@ -72,9 +71,11 @@ My approach evolved significantly over the ~4.5 hour development period:
 
 3. **2-3 hours**: Started building graphs from scratch. Tried different approaches, thought two loops would work well.
 
-4. **4-4.5 hours**: Dropped simulated annealing. Used simple heuristic that spaces queried nodes evenly. Single loop beat dual loops by 44%.
+4. **4-4.5 hours**: Dropped simulated annealing. Used heuristic that spaces queried nodes evenly. Got 87% improvement with single loop.
 
-The journey taught me that sometimes the best solution comes from questioning initial assumptions (working with the given graph) and that simple, well-motivated heuristics can outperform complex optimization algorithms.
+5. **Final iteration**: Tested different orderings (interleaved vs sequential). Sequential ordering (0-1-2-3...) performed best with 98.2% improvement.
+
+The journey taught me that sometimes the best solution comes from questioning initial assumptions and that simple, well-motivated approaches can outperform complex algorithms. I've done an NP-hard graph partitioning problem (https://github.com/f4t4nt/cs170-project) before where simulated annealing + genetic algorithm worked ridiculously well, but here a simple heuristic was best.
 
 ### Timeline
 

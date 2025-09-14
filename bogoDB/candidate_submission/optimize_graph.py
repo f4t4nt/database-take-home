@@ -98,47 +98,9 @@ def optimize_graph(
     with open(os.path.join(project_dir, "data", "queries.json"), "r") as f:
         queries = json.load(f)
     
-    # Get queried nodes and sort remaining by value
-    queried_nodes = sorted(set(queries))  # Unique queried nodes
-    non_queried = [n for n in range(num_nodes) if n not in queried_nodes]
-    
-    # Split non-queried into low-valued (important) and rest
-    low_valued_cutoff = 100  # Consider nodes 0-99 as low-valued/important
-    low_valued_non_queried = [n for n in non_queried if n < low_valued_cutoff]
-    remaining_nodes = [n for n in non_queried if n >= low_valued_cutoff]
-    
-    print(f"Queried nodes: {len(queried_nodes)}")
-    print(f"Low-valued non-queried: {len(low_valued_non_queried)}")
-    print(f"Remaining nodes: {len(remaining_nodes)}")
-    
-    # Create single optimized loop
-    loop = [None] * num_nodes
-    
-    # 1. Place queried nodes evenly throughout the loop
-    if queried_nodes:
-        spacing = num_nodes / len(queried_nodes)
-        for i, node in enumerate(queried_nodes):
-            pos = int(i * spacing) % num_nodes
-            loop[pos] = node
-    
-    # 2. Place low-valued non-queried nodes evenly with offset
-    if low_valued_non_queried:
-        spacing = num_nodes / len(low_valued_non_queried)
-        for i, node in enumerate(low_valued_non_queried):
-            pos = int((i * spacing + 20) % num_nodes)  # offset by 20 to avoid clustering
-            # Find next empty position if collision
-            while loop[pos] is not None:
-                pos = (pos + 1) % num_nodes
-            loop[pos] = node
-    
-    # 3. Fill remaining positions with random permutation
-    shuffled_remaining = remaining_nodes.copy()
-    random.shuffle(shuffled_remaining)
-    remaining_iter = iter(shuffled_remaining)
-    
-    for i in range(num_nodes):
-        if loop[i] is None:
-            loop[i] = next(remaining_iter)
+    # Simple sequential ordering (0-1-2-3-4...)
+    # This performs best based on testing different interleaved patterns
+    loop = list(range(num_nodes))
     
     # Build graph from single loop with top-100 shortcuts
     optimized_graph = {str(i): {} for i in range(num_nodes)}
