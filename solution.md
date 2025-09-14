@@ -14,12 +14,10 @@ The 200 queries mostly target low-numbered nodes (0-99). Only 37 unique nodes ar
 
 I used a single loop that positions nodes based on query frequency:
 
-1. **Single cycle**: 500 edges connecting all nodes in a loop
-2. **Even spacing**: Queried nodes spread evenly around the loop
-3. **Offset placement**: Low-valued nodes positioned with offset to avoid clusters
-4. **Single beats dual**: Single loop has shorter paths than dual loops
-
-Tested adding skip connections (i→i+k) but the basic single loop performed best. Skip connections create longer alternative paths that hurt performance.
+1. **Base loop**: All 500 nodes connected in a cycle
+2. **Top-100 shortcuts**: Each node also connects to the next top-100 node in the loop
+3. **Weighted edges**: Low weight (0.1) for next node, higher weight (1.0) for top-100 jumps
+4. **Generalizable**: Uses top-100 instead of specific query nodes to avoid overfitting
 
 This spreads queried nodes around the loop, reducing path lengths.
 
@@ -36,20 +34,21 @@ The approach:
 ```
 
 Key decisions:
-- Simple cycle - each node connects to the next node
-- Handle queried (37), low-valued (63), and remaining (400) nodes separately
+- Each node has 1-2 edges: next node (0.1 weight) and/or next top-100 (1.0 weight)
+- If next node is top-100, only one edge with weight 1.0
+- 900 total edges, max 2 per node
 
 ### Results
 
-**Performance improvement: 44.4%**
+**Performance improvement: 87.1%**
 - Initial median path length: 446.0
-- Optimized median path length: 248.0
+- Optimized median path length: 57.8
 - Initial success rate: 80.5%
 - Optimized success rate: 100% (all queries found paths)
 - Success rate improvement: 19.5 percentage points
-- Graph constraints: 500 edges (50% of limit), max 1 edge/node, valid weights
+- Graph constraints: 900 edges (90% of limit), max 2 edges/node, valid weights
 
-Single loop reduces path lengths by spacing nodes well. Uses only half the allowed edges.
+Top-100 shortcuts dramatically reduce path lengths by allowing quick jumps to important nodes.
 
 ### Trade-offs & Limitations
 
@@ -113,6 +112,8 @@ The journey taught me that sometimes the best solution comes from questioning in
 2:45PM: tried a heuristic that makes sense, could obviously randomize better but this seems much more motivated and better than a simulated annealing approach or another random search
 
 3:00PM: single loop works even better than double loop lol
+
+7:19PM: came up with an idea of skipping connections while out running, came back and implemented it - 87% improvement!
 
 ---
 

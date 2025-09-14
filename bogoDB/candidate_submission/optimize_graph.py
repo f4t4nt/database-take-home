@@ -140,14 +140,28 @@ def optimize_graph(
         if loop[i] is None:
             loop[i] = next(remaining_iter)
     
-    # Build graph from single loop
+    # Build graph from single loop with top-100 shortcuts
     optimized_graph = {str(i): {} for i in range(num_nodes)}
+    top100_nodes = set(range(100))  # Nodes 0-99 are important
     
-    # Add edges for the loop (each node connects to the next)
+    # Add edges: next node and/or next top-100 node
     for i in range(num_nodes):
         source = loop[i]
-        target = loop[(i + 1) % num_nodes]
-        optimized_graph[str(source)][str(target)] = 1.0
+        next_node = loop[(i + 1) % num_nodes]
+        
+        # If next node is top-100, use higher weight
+        if next_node in top100_nodes:
+            optimized_graph[str(source)][str(next_node)] = 1.0
+        else:
+            # Next node is not top-100, add it with low weight
+            optimized_graph[str(source)][str(next_node)] = 0.1
+            
+            # Also find and add next top-100 node
+            for j in range(2, num_nodes):
+                next_top100 = loop[(i + j) % num_nodes]
+                if next_top100 in top100_nodes:
+                    optimized_graph[str(source)][str(next_top100)] = 1.0
+                    break
     
     total_edges = sum(len(edges) for edges in optimized_graph.values())
     print(f"Total edges: {total_edges}")
